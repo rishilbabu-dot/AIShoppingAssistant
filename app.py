@@ -4,13 +4,14 @@ from bs4 import BeautifulSoup
 
 st.set_page_config(page_title="Multi-Store Product Search", layout="wide")
 
+# --- Amazon Scraper (until you provide API keys) ---
 def search_amazon(query):
     url = f"https://www.amazon.in/s?k={query.replace(' ', '+')}"
     headers = {
         "User-Agent": "Mozilla/5.0",
         "Accept-Language": "en-US,en;q=0.9"
     }
-    resp = requests.get(url, headers=headers)
+    resp = requests.get(url, headers=headers, timeout=10)
     soup = BeautifulSoup(resp.text, "html.parser")
     results = []
     for item in soup.select("div.s-result-item[data-asin]"):
@@ -30,31 +31,39 @@ def search_amazon(query):
             break
     return results
 
+# --- Flipkart Affiliate API Integration ---
 def search_flipkart(query):
-    url = f"https://www.flipkart.com/search?q={query.replace(' ', '+')}"
+    AFF_ID = "rishilbabu"
+    TOKEN = "b19165477d9d4076a058547b247b380c"
     headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Accept-Language": "en-US,en;q=0.9"
+        "Fk-Affiliate-Id": AFF_ID,
+        "Fk-Affiliate-Token": TOKEN
     }
-    resp = requests.get(url, headers=headers)
-    soup = BeautifulSoup(resp.text, "html.parser")
-    results = []
-    for item in soup.select("div._1AtVbE"):
-        title = item.select_one("div._4rR01T")
-        link = item.select_one("a._1fQZEK")
-        price = item.select_one("div._30jeq3")
-        image = item.select_one("img._396cs4")
-        if title and link and price and image:
-            results.append({
-                "title": title.text.strip(),
-                "url": "https://www.flipkart.com" + link.get("href"),
-                "price": price.text.strip(),
-                "image": image.get("src"),
-                "source": "Flipkart"
-            })
-        if len(results) >= 10:
-            break
-    return results
+    url = f"https://affiliate-api.flipkart.net/affiliate/search/json?query={query.replace(' ', '%20')}"
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        data = resp.json()
+        results = []
+        for product in data.get('products', []):
+            info = product.get('productBaseInfoV1', {})
+            title = info.get('title')
+            price = info.get('flipkartSellingPrice', {}).get('amount')
+            currency = info.get('flipkartSellingPrice', {}).get('currency', 'INR')
+            image = info.get('imageUrls', {}).get('200x200')
+            url = info.get('affiliateUrl')
+            if title and price and image and url:
+                results.append({
+                    "title": title,
+                    "url": url,
+                    "price": f"{currency} {price}",
+                    "image": image,
+                    "source": "Flipkart"
+                })
+            if len(results) >= 10:
+                break
+        return results
+    except Exception as e:
+        return []
 
 st.title("🛒 Multi-Store Product Search (Amazon & Flipkart)")
 
@@ -80,4 +89,4 @@ if query:
 else:
     st.info("Type a product name and hit Enter to search.")
 
-st.caption("Prototype app | For learning/demo purposes only | Built with Streamlit")
+st.caption("Prototype app | Amazon uses scraping, Flipkart uses Affiliate API | Built with Streamlit")
